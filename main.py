@@ -1,0 +1,1 @@
+print("Hello! History Tracker has started.")
