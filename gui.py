@@ -2,9 +2,12 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import sys
+import os
+from pathlib import Path
+import shutil
 
 # -----------------------------
 # LOGGING SETUP
@@ -22,6 +25,140 @@ logger = logging.getLogger(__name__)
 logger.info("=" * 50)
 logger.info("APPLICATION STARTING")
 logger.info("=" * 50)
+
+# -----------------------------
+# CHECK IF tracker.db EXISTS, IF NOT CREATE IT FROM CHROME
+# -----------------------------
+def ensure_database_exists():
+    """Check if tracker.db exists, if not create it from Chrome history"""
+    if os.path.exists("tracker.db"):
+        logger.info("✅ tracker.db found!")
+        return True
+    
+    logger.warning("tracker.db not found! Creating from Chrome history...")
+    
+    try:
+        # Locate Chrome History
+        chrome_history_path = (
+            Path.home()
+            / "AppData"
+            / "Local"
+            / "Google"
+            / "Chrome"
+            / "User Data"
+            / "Default"
+            / "History"
+        )
+        
+        if not chrome_history_path.exists():
+            logger.error(f"Chrome history not found at: {chrome_history_path}")
+            logger.error("Please make sure Chrome is installed and you have browsing history.")
+            return False
+        
+        logger.info(f"Found Chrome history at: {chrome_history_path}")
+        
+        # Copy Chrome History (to avoid locking issues)
+        shutil.copy2(chrome_history_path, "History_Copy")
+        logger.info("✅ Chrome history copied successfully")
+        
+        # Read and convert
+        conn = sqlite3.connect("History_Copy")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, title, url, last_visit_time
+            FROM urls
+            ORDER BY last_visit_time DESC
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if not rows:
+            logger.warning("No history found in Chrome! Creating sample data...")
+            return create_sample_database()
+        
+        # Create tracker.db
+        tracker = sqlite3.connect("tracker.db")
+        t_cursor = tracker.cursor()
+        t_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY,
+                title TEXT,
+                url TEXT,
+                visit_date TEXT,
+                visit_time TEXT
+            )
+        """)
+        
+        chrome_epoch = datetime(1601, 1, 1)
+        count = 0
+        
+        for id, title, url, timestamp in rows:
+            try:
+                dt = chrome_epoch + timedelta(microseconds=timestamp) + timedelta(hours=5)
+                date_str = dt.strftime("%d-%m-%Y")
+                time_str = dt.strftime("%I:%M:%S %p")
+                
+                t_cursor.execute("INSERT OR IGNORE INTO history VALUES (?, ?, ?, ?, ?)", 
+                                 (id, title, url, date_str, time_str))
+                count += 1
+            except Exception as e:
+                logger.debug(f"Skipping record {id}: {e}")
+                continue
+        
+        tracker.commit()
+        tracker.close()
+        
+        logger.info(f"✅ Created tracker.db with {count} records from Chrome history!")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to create tracker.db: {e}")
+        return False
+
+def create_sample_database():
+    """Create a sample database with example data"""
+    logger.info("Creating sample database with example data...")
+    
+    try:
+        tracker = sqlite3.connect("tracker.db")
+        t_cursor = tracker.cursor()
+        t_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY,
+                title TEXT,
+                url TEXT,
+                visit_date TEXT,
+                visit_time TEXT
+            )
+        """)
+        
+        sample_data = [
+            (1, "Google Search", "https://www.google.com", "13-07-2026", "10:30:00 AM"),
+            (2, "YouTube - Python Tutorial", "https://www.youtube.com", "13-07-2026", "11:00:00 AM"),
+            (3, "GitHub - History Tracker", "https://www.github.com", "13-07-2026", "11:30:00 AM"),
+            (4, "Stack Overflow - Python Help", "https://stackoverflow.com", "12-07-2026", "02:15:00 PM"),
+            (5, "Wikipedia - Chrome History", "https://www.wikipedia.org", "12-07-2026", "03:45:00 PM"),
+        ]
+        
+        for id, title, url, date, time in sample_data:
+            t_cursor.execute("INSERT OR IGNORE INTO history VALUES (?, ?, ?, ?, ?)", 
+                           (id, title, url, date, time))
+        
+        tracker.commit()
+        tracker.close()
+        
+        logger.info("✅ Created sample database with example data!")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to create sample database: {e}")
+        return False
+
+# Run database check before starting
+if not ensure_database_exists():
+    logger.critical("❌ Could not create database! App cannot continue.")
+    input("Press Enter to exit...")
+    sys.exit(1)
 
 # -----------------------------
 # METRICS TRACKER (Built-in)
@@ -188,7 +325,6 @@ def get_total_records(search_text=""):
         metrics.error_occurred(str(e))
         return 0
 
-
 # -----------------------------
 # Function to Load History (BATCHED)
 # -----------------------------
@@ -292,7 +428,6 @@ def load_history(search_text="", reset=True):
     elif load_time > 0.5:
         logger.debug(f"Moderate load time: {load_time:.3f} seconds")
 
-
 # -----------------------------
 # Load More Function
 # -----------------------------
@@ -306,7 +441,6 @@ def load_more():
         # ============ WARNING LOG: User clicked but all loaded ============
         logger.warning("Load More clicked but all records already loaded")
 
-
 # -----------------------------
 # Search Event
 # -----------------------------
@@ -317,7 +451,6 @@ def search(event):
         # ============ INFO LOG: Search performed ============
         logger.info(f"Searching for: '{search_text}'")
     load_history(search_text, reset=True)
-
 
 # -----------------------------
 # Bind Events
