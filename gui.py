@@ -10,13 +10,25 @@ from pathlib import Path
 import shutil
 
 # -----------------------------
+# GET APP DIRECTORY (Works for both Python and EXE)
+# -----------------------------
+if getattr(sys, 'frozen', False):
+    # Running as compiled EXE
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    # Running as Python script
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# -----------------------------
 # LOGGING SETUP
 # -----------------------------
+log_path = os.path.join(APP_DIR, 'app.log')
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('app.log'),
+        logging.FileHandler(log_path),
         logging.StreamHandler()
     ]
 )
@@ -24,6 +36,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.info("=" * 50)
 logger.info("APPLICATION STARTING")
+logger.info(f"App Directory: {APP_DIR}")
 logger.info("=" * 50)
 
 # -----------------------------
@@ -31,7 +44,9 @@ logger.info("=" * 50)
 # -----------------------------
 def ensure_database_exists():
     """Check if tracker.db exists, if not create it from Chrome history"""
-    if os.path.exists("tracker.db"):
+    db_path = os.path.join(APP_DIR, "tracker.db")
+    
+    if os.path.exists(db_path):
         logger.info("✅ tracker.db found!")
         return True
     
@@ -58,11 +73,12 @@ def ensure_database_exists():
         logger.info(f"Found Chrome history at: {chrome_history_path}")
         
         # Copy Chrome History (to avoid locking issues)
-        shutil.copy2(chrome_history_path, "History_Copy")
+        history_copy_path = os.path.join(APP_DIR, "History_Copy")
+        shutil.copy2(chrome_history_path, history_copy_path)
         logger.info("✅ Chrome history copied successfully")
         
         # Read and convert
-        conn = sqlite3.connect("History_Copy")
+        conn = sqlite3.connect(history_copy_path)
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, title, url, last_visit_time
@@ -77,7 +93,7 @@ def ensure_database_exists():
             return create_sample_database()
         
         # Create tracker.db
-        tracker = sqlite3.connect("tracker.db")
+        tracker = sqlite3.connect(db_path)
         t_cursor = tracker.cursor()
         t_cursor.execute("""
             CREATE TABLE IF NOT EXISTS history (
@@ -120,7 +136,8 @@ def create_sample_database():
     logger.info("Creating sample database with example data...")
     
     try:
-        tracker = sqlite3.connect("tracker.db")
+        db_path = os.path.join(APP_DIR, "tracker.db")
+        tracker = sqlite3.connect(db_path)
         t_cursor = tracker.cursor()
         t_cursor.execute("""
             CREATE TABLE IF NOT EXISTS history (
@@ -153,6 +170,12 @@ def create_sample_database():
     except Exception as e:
         logger.error(f"Failed to create sample database: {e}")
         return False
+
+# -----------------------------
+# GET DATABASE PATH
+# -----------------------------
+def get_db_path():
+    return os.path.join(APP_DIR, "tracker.db")
 
 # Run database check before starting
 if not ensure_database_exists():
@@ -305,7 +328,8 @@ def get_total_records(search_text=""):
     """Get total number of records matching search"""
     try:
         logger.debug(f"Getting total records for: '{search_text}'")
-        connection = sqlite3.connect("tracker.db")
+        db_path = get_db_path()
+        connection = sqlite3.connect(db_path)
         cursor = connection.cursor()
 
         if search_text == "":
@@ -349,7 +373,8 @@ def load_history(search_text="", reset=True):
             total_label.config(text=f"Total: {total_records} records")
             logger.info(f"Reset complete. Total records: {total_records}")
 
-        connection = sqlite3.connect("tracker.db")
+        db_path = get_db_path()
+        connection = sqlite3.connect(db_path)
         cursor = connection.cursor()
 
         # Load only BATCH_SIZE records starting from current_offset
