@@ -2,7 +2,8 @@ name: Build EXE with PyInstaller
 
 on:
   push:
-    branches: ["main"]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -31,3 +32,13 @@ jobs:
         with:
           name: HistoryTracker-EXE
           path: dist/gui.exe
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/gui.exe
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
