@@ -8,6 +8,7 @@ import sys
 import os
 from pathlib import Path
 import shutil
+import tkinter.messagebox as msgbox
 
 # -----------------------------
 # GET APP DIRECTORY (Works for both Python and EXE)
@@ -114,6 +115,10 @@ def ensure_database_exists():
                 date_str = dt.strftime("%d-%m-%Y")
                 time_str = dt.strftime("%I:%M:%S %p")
                 
+                # Handle empty titles
+                if not title or title.strip() == "":
+                    title = "No Title"
+                
                 t_cursor.execute("INSERT OR IGNORE INTO history VALUES (?, ?, ?, ?, ?)", 
                                  (id, title, url, date_str, time_str))
                 count += 1
@@ -150,11 +155,11 @@ def create_sample_database():
         """)
         
         sample_data = [
-            (1, "Google Search", "https://www.google.com", "13-07-2026", "10:30:00 AM"),
-            (2, "YouTube - Python Tutorial", "https://www.youtube.com", "13-07-2026", "11:00:00 AM"),
-            (3, "GitHub - History Tracker", "https://www.github.com", "13-07-2026", "11:30:00 AM"),
-            (4, "Stack Overflow - Python Help", "https://stackoverflow.com", "12-07-2026", "02:15:00 PM"),
-            (5, "Wikipedia - Chrome History", "https://www.wikipedia.org", "12-07-2026", "03:45:00 PM"),
+            (1, "Google Search", "https://www.google.com", "16-07-2026", "10:30:00 AM"),
+            (2, "YouTube - Python Tutorial", "https://www.youtube.com", "16-07-2026", "11:00:00 AM"),
+            (3, "GitHub - History Tracker", "https://www.github.com", "16-07-2026", "11:30:00 AM"),
+            (4, "Stack Overflow - Python Help", "https://stackoverflow.com", "15-07-2026", "02:15:00 PM"),
+            (5, "Wikipedia - Chrome History", "https://www.wikipedia.org", "15-07-2026", "03:45:00 PM"),
         ]
         
         for id, title, url, date, time in sample_data:
@@ -177,10 +182,31 @@ def create_sample_database():
 def get_db_path():
     return os.path.join(APP_DIR, "tracker.db")
 
+# -----------------------------
+# SHOW ERROR MESSAGE (Works for both Python and EXE)
+# -----------------------------
+def show_error_message(title, message):
+    """Show error message in a popup"""
+    try:
+        root_temp = tk.Tk()
+        root_temp.withdraw()
+        msgbox.showerror(title, message)
+        root_temp.destroy()
+    except:
+        print(f"ERROR: {title}")
+        print(f"Message: {message}")
+        input("Press Enter to exit...")
+
 # Run database check before starting
 if not ensure_database_exists():
     logger.critical("❌ Could not create database! App cannot continue.")
-    input("Press Enter to exit...")
+    show_error_message(
+        "Database Error",
+        "Could not create database!\n\nPlease make sure:\n"
+        "1. Google Chrome is installed\n"
+        "2. You have browsing history\n"
+        "3. You have write permissions in this folder"
+    )
     sys.exit(1)
 
 # -----------------------------
@@ -232,7 +258,6 @@ class MetricsTracker:
         logger.info(f"Uptime: {uptime} minutes")
         logger.info(f"Total Searches: {self.metrics['searches']}")
         
-        # Show top 5 keywords
         if self.metrics['search_keywords']:
             from collections import Counter
             top = Counter(self.metrics['search_keywords']).most_common(5)
@@ -266,6 +291,7 @@ try:
     root.geometry("1200x600")
 except Exception as e:
     logger.critical(f"Failed to create main window: {e}")
+    show_error_message("Error", f"Failed to create main window:\n{e}")
     sys.exit(1)
 
 # -----------------------------
@@ -299,8 +325,8 @@ for col in columns:
 
 tree.column("Date", width=100)
 tree.column("Time", width=100)
-tree.column("Title", width=300)
-tree.column("URL", width=650)
+tree.column("Title", width=350)
+tree.column("URL", width=600)
 
 scrollbar = ttk.Scrollbar(root, orient="vertical", command=tree.yview)
 tree.configure(yscrollcommand=scrollbar.set)
@@ -313,7 +339,7 @@ logger.debug("UI setup complete")
 # -----------------------------
 # BATCHING VARIABLES
 # -----------------------------
-BATCH_SIZE = 50  # Load 50 records at a time
+BATCH_SIZE = 50
 current_offset = 0
 current_search = ""
 total_records = 0
@@ -358,12 +384,10 @@ def load_history(search_text="", reset=True):
     
     logger.info(f"Loading history: search='{search_text}', reset={reset}")
     
-    # Start timer for performance metric
     start_time = time.time()
 
     try:
         if reset:
-            # Clear table and reset variables
             for row in tree.get_children():
                 tree.delete(row)
             current_offset = 0
@@ -377,11 +401,16 @@ def load_history(search_text="", reset=True):
         connection = sqlite3.connect(db_path)
         cursor = connection.cursor()
 
-        # Load only BATCH_SIZE records starting from current_offset
+        # Handle empty titles in SQL query
         if search_text == "":
             logger.debug(f"Loading batch: offset={current_offset}, limit={BATCH_SIZE}")
             cursor.execute("""
-                SELECT visit_date, visit_time, title, url
+                SELECT visit_date, visit_time, 
+                       CASE 
+                           WHEN title IS NULL OR title = '' THEN 'No Title'
+                           ELSE title 
+                       END as title,
+                       url
                 FROM history
                 ORDER BY id DESC
                 LIMIT ? OFFSET ?
@@ -389,7 +418,12 @@ def load_history(search_text="", reset=True):
         else:
             logger.debug(f"Loading search batch: search='{search_text}', offset={current_offset}")
             cursor.execute("""
-                SELECT visit_date, visit_time, title, url
+                SELECT visit_date, visit_time, 
+                       CASE 
+                           WHEN title IS NULL OR title = '' THEN 'No Title'
+                           ELSE title 
+                       END as title,
+                       url
                 FROM history
                 WHERE title LIKE ? OR url LIKE ?
                 ORDER BY id DESC
@@ -401,18 +435,14 @@ def load_history(search_text="", reset=True):
 
         logger.info(f"Loaded {len(rows)} records")
         
-        # Track records loaded metric
         if rows:
             metrics.records_loaded(len(rows))
 
-        # Insert rows
         for row in rows:
             tree.insert("", tk.END, values=row)
 
-        # Update offset
         current_offset += len(rows)
 
-        # Check if all records are loaded
         if current_offset >= total_records:
             all_records_loaded = True
             load_more_btn.config(text="All Loaded", state="disabled")
@@ -425,11 +455,9 @@ def load_history(search_text="", reset=True):
             )
             logger.debug(f"{remaining} records remaining")
 
-        # Update total label with loaded count
         loaded = len(tree.get_children())
         total_label.config(text=f"Loaded: {loaded} / Total: {total_records} records")
         
-        # ============ WARNING LOG: Check if no records found ============
         if len(rows) == 0 and search_text != "":
             logger.warning(f"No results found for search: '{search_text}'")
         
@@ -442,12 +470,10 @@ def load_history(search_text="", reset=True):
         total_label.config(text="ERROR: Unexpected error")
         metrics.error_occurred(str(e))
     
-    # Track load time
     load_time = time.time() - start_time
     metrics.batch_load_time(load_time)
     logger.debug(f"Batch loaded in {load_time:.3f} seconds")
     
-    # ============ WARNING LOG: Check if load time is slow ============
     if load_time > 1.0:
         logger.warning(f"Slow batch load: {load_time:.2f} seconds")
     elif load_time > 0.5:
@@ -463,7 +489,6 @@ def load_more():
     if not all_records_loaded:
         load_history(current_search, reset=False)
     else:
-        # ============ WARNING LOG: User clicked but all loaded ============
         logger.warning("Load More clicked but all records already loaded")
 
 # -----------------------------
@@ -473,7 +498,6 @@ def search(event):
     search_text = search_entry.get()
     if search_text:
         metrics.search_performed(search_text)
-        # ============ INFO LOG: Search performed ============
         logger.info(f"Searching for: '{search_text}'")
     load_history(search_text, reset=True)
 
@@ -491,8 +515,8 @@ logger.info("Performing initial load")
 try:
     load_history("", reset=True)
 except Exception as e:
-    # ============ CRITICAL LOG: App failed to load ============
     logger.critical(f"Failed to load initial history: {e}")
+    show_error_message("Error", f"Failed to load history:\n{e}")
     sys.exit(1)
 
 # -----------------------------
@@ -511,5 +535,4 @@ root.protocol("WM_DELETE_WINDOW", on_closing)
 logger.info("Application ready")
 root.mainloop()
 
-# ============ CRITICAL LOG: App crashed ============
 logger.critical("Application crashed unexpectedly")
