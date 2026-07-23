@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 import shutil
+import time
 
 try:
     import psycopg2
@@ -16,21 +17,72 @@ DB_USER = os.getenv('DB_USER', 'history_user')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'history_pass')
 DB_NAME = os.getenv('DB_NAME', 'history_db')
 
+def wait_for_postgres(max_attempts=15, delay=2):
+    """Wait for PostgreSQL to be ready"""
+    print("⏳ Waiting for PostgreSQL to be ready...")
+    for attempt in range(max_attempts):
+        try:
+            conn = psycopg2.connect(
+                host=DB_HOST,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                database=DB_NAME,
+                connect_timeout=2
+            )
+            conn.close()
+            print("✅ PostgreSQL is ready!")
+            return True
+        except Exception as e:
+            print(f"⏳ Waiting... (attempt {attempt + 1}/{max_attempts})")
+            time.sleep(delay)
+    print("❌ PostgreSQL not available after waiting.")
+    return False
+
+def find_chrome_history():
+    """Auto-detect Chrome history path"""
+    possible_paths = [
+        # Docker container path
+        Path("/root/.config/google-chrome/Default/History"),
+        # Windows paths
+        Path(os.path.expanduser("~")) / "AppData/Local/Google/Chrome/User Data/Default/History",
+        Path("C:/Users") / os.getenv("USERNAME", "") / "AppData/Local/Google/Chrome/User Data/Default/History",
+        # Linux paths
+        Path.home() / ".config/google-chrome/Default/History",
+        Path.home() / ".cache/google-chrome/Default/History",
+    ]
+    
+    # Check if CHROME_PATH environment variable is set
+    env_path = os.getenv("CHROME_PATH")
+    if env_path:
+        path = Path(env_path)
+        if path.exists():
+            return path
+    
+    for path in possible_paths:
+        if path.exists():
+            return path
+    return None
+
 def main():
     print("=" * 50)
     print("🐘 CHROME HISTORY → POSTGRESQL")
     print("=" * 50)
     
-    chrome_path = Path("/root/.config/google-chrome/Default/History")
-    print(f"🔍 Looking for Chrome history at: {chrome_path}")
-    print(f"📁 File exists: {chrome_path.exists()}")
+    # Wait for PostgreSQL
+    if not wait_for_postgres():
+        sys.exit(1)
     
-    if not chrome_path.exists():
+    # Auto-detect Chrome history
+    chrome_path = find_chrome_history()
+    print(f"🔍 Looking for Chrome history...")
+    
+    if not chrome_path:
         print("❌ Chrome history NOT FOUND!")
+        print("💡 Make sure Chrome is installed and you have browsing history.")
         return
     
+    print(f"📂 Found Chrome history at: {chrome_path}")
     print(f"📄 File size: {chrome_path.stat().st_size} bytes")
-    print("✅ Chrome history FOUND! Reading it now...")
     
     # Connect to PostgreSQL
     try:
@@ -45,7 +97,7 @@ def main():
         print(f"❌ PostgreSQL connection failed: {e}")
         return
     
-    # Clear existing table (to remove sample data)
+    # Recreate table (clear old data)
     cursor = conn.cursor()
     cursor.execute("DROP TABLE IF EXISTS history")
     cursor.execute("""
@@ -58,9 +110,9 @@ def main():
         )
     """)
     conn.commit()
-    print("✅ Table recreated (sample data removed)")
+    print("✅ Table recreated")
     
-    # Read ALL Chrome history (no LIMIT)
+    # Read ALL Chrome history
     try:
         copy_path = Path("/tmp/History_Copy")
         shutil.copy2(chrome_path, copy_path)

@@ -23,9 +23,10 @@ services:
       DB_USER: history_user
       DB_PASSWORD: history_pass
       DB_NAME: history_db
+      CHROME_PATH: ${CHROME_PATH:-/root/.config/google-chrome/Default/History}
     volumes:
       - .:/app
-      - "C:/Users/PMLS/AppData/Local/Google/Chrome/User Data/Default:/root/.config/google-chrome/Default:ro"
+      - "${CHROME_MOUNT:-C:/Users/PMLS/AppData/Local/Google/Chrome/User Data/Default}:/root/.config/google-chrome/Default:ro"
     networks:
       - history-network
     stdin_open: true
