@@ -470,3 +470,32 @@
 2026-07-22 11:41:41,418 - INFO - APPLICATION CLOSED
 2026-07-22 11:41:41,418 - INFO - ==================================================
 2026-07-22 11:41:41,456 - CRITICAL - Application crashed unexpectedly
+2026-07-23 10:41:22,273 - INFO - ==================================================
+2026-07-23 10:41:22,273 - INFO - APPLICATION STARTING
+2026-07-23 10:41:22,273 - INFO - App Directory: C:\Users\PMLS\Desktop\HistoryTracker
+2026-07-23 10:41:22,274 - INFO - PostgreSQL Available: False
+2026-07-23 10:41:22,274 - INFO - ==================================================
+2026-07-23 10:41:22,291 - INFO - Creating main window
+2026-07-23 10:41:22,510 - INFO - Batch size set to 50
+2026-07-23 10:41:22,511 - INFO - Performing initial load
+2026-07-23 10:41:22,511 - INFO - Loading history: search='', reset=True
+2026-07-23 10:41:22,615 - INFO - Reset complete. Total records: 2338
+2026-07-23 10:41:22,617 - INFO - Loaded 50 records
+2026-07-23 10:41:22,619 - INFO - Application ready
+2026-07-23 10:41:48,084 - INFO - Application closing
+2026-07-23 10:41:48,084 - INFO - ==================================================
+2026-07-23 10:41:48,085 - INFO - METRICS SUMMARY
+2026-07-23 10:41:48,085 - INFO - ==================================================
+2026-07-23 10:41:48,085 - INFO - App Started: 2026-07-23 10:41:22
+2026-07-23 10:41:48,085 - INFO - Uptime: 0.43 minutes
+2026-07-23 10:41:48,085 - INFO - Total Searches: 0
+2026-07-23 10:41:48,086 - INFO - Top Keywords: []
+2026-07-23 10:41:48,086 - INFO - Load More Clicks: 0
+2026-07-23 10:41:48,086 - INFO - Records Viewed: 50
+2026-07-23 10:41:48,087 - INFO - Avg Load Time: 0.107 seconds
+2026-07-23 10:41:48,087 - INFO - Errors: 0
+2026-07-23 10:41:48,087 - INFO - ==================================================
+2026-07-23 10:41:48,087 - INFO - ==================================================
+2026-07-23 10:41:48,088 - INFO - APPLICATION CLOSED
+2026-07-23 10:41:48,088 - INFO - ==================================================
+2026-07-23 10:41:48,115 - CRITICAL - Application crashed unexpectedly
