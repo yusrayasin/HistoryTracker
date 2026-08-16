@@ -9,4 +9,4 @@ COPY headless.py .
 COPY gui.py .
 COPY . .
 
-CMD ["python", "headless.py"]
+CMD ["sh", "-c", "python headless.py && python web_app.py"]

@@ -63,6 +63,19 @@ def find_chrome_history():
             return path
     return None
 
+def clean_title(title, url):
+    """Clean up title: use URL if title is empty or 'No Title'"""
+    if not title or title.strip() == "" or title == "No Title":
+        # Use URL as fallback
+        if url:
+            # Remove protocol and shorten if too long
+            clean_url = url.replace("https://", "").replace("http://", "")
+            if len(clean_url) > 60:
+                clean_url = clean_url[:60] + "..."
+            return clean_url
+        return "Untitled"
+    return title
+
 def main():
     print("=" * 50)
     print("🐘 CHROME HISTORY → POSTGRESQL")
@@ -144,14 +157,14 @@ def main():
             date_str = dt.strftime("%d-%m-%Y")
             time_str = dt.strftime("%I:%M:%S %p")
             
-            if not title:
-                title = "No Title"
+            # Clean title: use URL if title is empty
+            clean_title_text = clean_title(title, url)
             
             cursor.execute("""
                 INSERT INTO history (id, title, url, visit_date, visit_time)
                 VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO NOTHING
-            """, (id, title, url, date_str, time_str))
+            """, (id, clean_title_text, url, date_str, time_str))
             count += 1
         
         conn.commit()

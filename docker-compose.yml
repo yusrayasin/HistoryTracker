@@ -18,6 +18,8 @@ services:
     container_name: history-tracker-app
     depends_on:
       - postgres
+    ports:
+      - "5000:5000"                     # ← ADD THIS LINE
     environment:
       DB_HOST: postgres
       DB_USER: history_user
@@ -37,3 +39,4 @@ volumes:
 
 networks:
   history-network:
+  
