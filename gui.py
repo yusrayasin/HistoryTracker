@@ -11,13 +11,22 @@ import shutil
 import tkinter.messagebox as msgbox
 
 # -----------------------------
+# TRY TO IMPORT POSTGRESQL (Optional - falls back to SQLite if not available)
+# -----------------------------
+try:
+    import psycopg2
+    import psycopg2.extras
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+    print("⚠️ psycopg2 not installed. Using SQLite only.")
+
+# -----------------------------
 # GET APP DIRECTORY (Works for both Python and EXE)
 # -----------------------------
 if getattr(sys, 'frozen', False):
-    # Running as compiled EXE
     APP_DIR = os.path.dirname(sys.executable)
 else:
-    # Running as Python script
     APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # -----------------------------
@@ -38,23 +47,82 @@ logger = logging.getLogger(__name__)
 logger.info("=" * 50)
 logger.info("APPLICATION STARTING")
 logger.info(f"App Directory: {APP_DIR}")
+logger.info(f"PostgreSQL Available: {POSTGRES_AVAILABLE}")
 logger.info("=" * 50)
+
+# -----------------------------
+# DATABASE CONFIGURATION
+# -----------------------------
+# PostgreSQL settings (for Docker)
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_USER = os.getenv('DB_USER', 'history_user')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'history_pass')
+DB_NAME = os.getenv('DB_NAME', 'history_db')
+
+# SQLite path
+SQLITE_PATH = os.path.join(APP_DIR, "tracker.db")
+
+# -----------------------------
+# DATABASE CONNECTION FUNCTION
+# -----------------------------
+def get_db_connection():
+    """Get database connection (PostgreSQL if available, else SQLite)"""
+    
+    # Try PostgreSQL first if available
+    if POSTGRES_AVAILABLE:
+        try:
+            conn = psycopg2.connect(
+                host=DB_HOST,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                database=DB_NAME,
+                connect_timeout=3
+            )
+            logger.info("✅ Connected to PostgreSQL database")
+            return conn, 'postgres'
+        except Exception as e:
+            logger.warning(f"PostgreSQL connection failed: {e}")
+            logger.info("Falling back to SQLite...")
+    
+    # Fallback to SQLite
+    try:
+        conn = sqlite3.connect(SQLITE_PATH)
+        logger.info("✅ Connected to SQLite database")
+        return conn, 'sqlite'
+    except Exception as e:
+        logger.error(f"SQLite connection failed: {e}")
+        return None, None
 
 # -----------------------------
 # CHECK IF tracker.db EXISTS, IF NOT CREATE IT FROM CHROME
 # -----------------------------
 def ensure_database_exists():
     """Check if tracker.db exists, if not create it from Chrome history"""
-    db_path = os.path.join(APP_DIR, "tracker.db")
     
-    if os.path.exists(db_path):
+    # If PostgreSQL is available, we don't need SQLite
+    if POSTGRES_AVAILABLE:
+        try:
+            conn = psycopg2.connect(
+                host=DB_HOST,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                database=DB_NAME,
+                connect_timeout=3
+            )
+            conn.close()
+            logger.info("✅ PostgreSQL database ready!")
+            return True
+        except:
+            pass
+    
+    # Otherwise use SQLite
+    if os.path.exists(SQLITE_PATH):
         logger.info("✅ tracker.db found!")
         return True
     
     logger.warning("tracker.db not found! Creating from Chrome history...")
     
     try:
-        # Locate Chrome History
         chrome_history_path = (
             Path.home()
             / "AppData"
@@ -68,17 +136,14 @@ def ensure_database_exists():
         
         if not chrome_history_path.exists():
             logger.error(f"Chrome history not found at: {chrome_history_path}")
-            logger.error("Please make sure Chrome is installed and you have browsing history.")
             return False
         
         logger.info(f"Found Chrome history at: {chrome_history_path}")
         
-        # Copy Chrome History (to avoid locking issues)
         history_copy_path = os.path.join(APP_DIR, "History_Copy")
         shutil.copy2(chrome_history_path, history_copy_path)
         logger.info("✅ Chrome history copied successfully")
         
-        # Read and convert
         conn = sqlite3.connect(history_copy_path)
         cursor = conn.cursor()
         cursor.execute("""
@@ -93,8 +158,7 @@ def ensure_database_exists():
             logger.warning("No history found in Chrome! Creating sample data...")
             return create_sample_database()
         
-        # Create tracker.db
-        tracker = sqlite3.connect(db_path)
+        tracker = sqlite3.connect(SQLITE_PATH)
         t_cursor = tracker.cursor()
         t_cursor.execute("""
             CREATE TABLE IF NOT EXISTS history (
@@ -115,7 +179,6 @@ def ensure_database_exists():
                 date_str = dt.strftime("%d-%m-%Y")
                 time_str = dt.strftime("%I:%M:%S %p")
                 
-                # Handle empty titles
                 if not title or title.strip() == "":
                     title = "No Title"
                 
@@ -141,8 +204,7 @@ def create_sample_database():
     logger.info("Creating sample database with example data...")
     
     try:
-        db_path = os.path.join(APP_DIR, "tracker.db")
-        tracker = sqlite3.connect(db_path)
+        tracker = sqlite3.connect(SQLITE_PATH)
         t_cursor = tracker.cursor()
         t_cursor.execute("""
             CREATE TABLE IF NOT EXISTS history (
@@ -180,10 +242,10 @@ def create_sample_database():
 # GET DATABASE PATH
 # -----------------------------
 def get_db_path():
-    return os.path.join(APP_DIR, "tracker.db")
+    return SQLITE_PATH
 
 # -----------------------------
-# SHOW ERROR MESSAGE (Works for both Python and EXE)
+# SHOW ERROR MESSAGE
 # -----------------------------
 def show_error_message(title, message):
     """Show error message in a popup"""
@@ -299,7 +361,6 @@ except Exception as e:
 # -----------------------------
 tk.Label(root, text="Search History", font=("Arial", 12, "bold")).pack(pady=5)
 
-# Top Frame for Search and Load More Button
 top_frame = tk.Frame(root)
 top_frame.pack(pady=5)
 
@@ -309,7 +370,6 @@ search_entry.pack(side=tk.LEFT, padx=5)
 load_more_btn = tk.Button(top_frame, text="Load More (50)", font=("Arial", 10))
 load_more_btn.pack(side=tk.LEFT, padx=5)
 
-# Label to show total records
 total_label = tk.Label(root, text="Total: 0 records", font=("Arial", 10, "bold"))
 total_label.pack()
 
@@ -401,7 +461,6 @@ def load_history(search_text="", reset=True):
         connection = sqlite3.connect(db_path)
         cursor = connection.cursor()
 
-        # Handle empty titles in SQL query
         if search_text == "":
             logger.debug(f"Loading batch: offset={current_offset}, limit={BATCH_SIZE}")
             cursor.execute("""

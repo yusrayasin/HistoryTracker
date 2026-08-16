@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: history-postgres
+    environment:
+      POSTGRES_USER: history_user
+      POSTGRES_PASSWORD: history_pass
+      POSTGRES_DB: history_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - history-network
+
+  app:
+    build: .
+    container_name: history-tracker-app
+    depends_on:
+      - postgres
+    ports:
+      - "5000:5000"                     # ← ADD THIS LINE
+    environment:
+      DB_HOST: postgres
+      DB_USER: history_user
+      DB_PASSWORD: history_pass
+      DB_NAME: history_db
+      CHROME_PATH: ${CHROME_PATH:-/root/.config/google-chrome/Default/History}
+    volumes:
+      - .:/app
+      - "${CHROME_MOUNT:-C:/Users/PMLS/AppData/Local/Google/Chrome/User Data/Default}:/root/.config/google-chrome/Default:ro"
+    networks:
+      - history-network
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_data:
+
+networks:
+  history-network:
+  
